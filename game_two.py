@@ -25,7 +25,7 @@ BUILDING = {
                     os.path.join(base_path, 'images', 'kremlin_3.gif')]
     },
     'house': {
-        'x': BASE_X+150, 'y': BASE_Y, 'health': 1000,
+        'x': BASE_X+150, 'y': BASE_Y, 'health': 1300,
         'picture': [os.path.join(base_path, 'images', 'house_1.gif'),
                     os.path.join(base_path, 'images', 'house_2.gif'),
                     os.path.join(base_path, 'images', 'house_3.gif')]
@@ -44,6 +44,7 @@ BUILDING = {
     }
 }
 
+
 class Rocket:
     def __init__(self, from_x, from_y, where_x, where_y, color):
         self.from_x = from_x
@@ -60,6 +61,10 @@ class Rocket:
         heading = rocket.towards(where_x, where_y)
         rocket.setheading(heading)
         rocket.showturtle()
+
+        #window.register_shape(os.path.join(base_path, 'images', 'missile.gif'))
+        #rocket.shape(os.path.join(base_path, 'images', 'missile.gif'))
+        #rocket.showturtle()
         self.rocket = rocket
         self.status = 'fly'
         self.target = where_x, where_y
@@ -85,21 +90,43 @@ class Rocket:
 
 
 class Base:
-    def __init__(self, x, y, health, base_pic):
-        self.x = x
-        self.y = y
-        self.pic = base_pic
-        self.health = health
+    def __init__(self, name, building: dict):
+        self.name = name
+        self.x = building['x']
+        self.y = building['y']
+
+        self.pic = building['picture']
+        self.health = building['health']
+        self.check_health = self.health
         base = turtle.Turtle(visible=False)
-        base.speed(5)
+        base.speed(0)
         base.penup()
         base.setpos(x=self.x, y=self.y)
-        base.write(self.health)
-        #base_pic = os.path.join(base_path, 'images', 'base.gif')
-        window.register_shape(self.pic)
-        base.shape(self.pic)
+
+        window.register_shape(self.pic[0])
+        base.shape(self.pic[0])
         base.showturtle()
         self.base = base
+
+        show_health = turtle.Turtle(visible=False)
+        show_health.speed(0)
+        show_health.penup()
+        show_health.setpos(x=self.x, y=self.y-65)
+        show_health.write(str(self.health), align="center", font=("Arial", 20, "bold"))
+        self.show_health = show_health
+        self.check_show_health = self.show_health
+
+    def show_pic(self):
+        if self.name != 'base':
+            if self.health <= self.check_health - 1200:
+                window.register_shape(self.pic[2])
+                self.base.shape(self.pic[2])
+            elif self.health <= self.check_health - 700:
+                window.register_shape(self.pic[1])
+                self.base.shape(self.pic[1])
+        if self.health != self.check_show_health:
+            self.show_health.clear()
+            self.show_health.write(str(self.health), align="center", font=("Arial", 20, "bold"))
 
 
 def rockets_forward(rockets: list):
@@ -128,41 +155,39 @@ def check_enemy_rocket_count():
         x = random.randint(-600, 600)
         y = 400
         index_building = random.randint(0, len(base_all)-1)
-        enemy_rockets.append(Rocket(color='red', from_x=x, from_y=y,
-                                    where_x=base_all[index_building].x,
-                                    where_y=base_all[index_building].y))
+        if base_all[index_building].health > 0:
+            enemy_rockets.append(Rocket(color='red', from_x=x, from_y=y,
+                                        where_x=base_all[index_building].x,
+                                        where_y=base_all[index_building].y))
 
 
 def create_building(buildings: dict):
     for building, value in buildings.items():
-        set_building = Base(x=value['x'], y=value['y'], health=value['health'], base_pic=value['picture'][0])
+        set_building = Base(building, value)
         base_all.append(set_building)
         
 
 def game_over():
     for i in base_all:
-        if i.health < 0:
+        if i.name == 'base' and i.health <= 0:
+            i.show_health.color('red')
+            i.show_health.setpos(x=0, y=0)
+            i.show_health.write('G A M E   O V E R', align="center", font=("Arial", 30, "bold"))
             return True
+        elif i.health <= 0:
+            alive_building.append(i)
         for enemy_rocket in enemy_rockets:
-            if enemy_rocket.status == 'bomb':
-                if enemy_rocket.rocket.distance(BASE_X, BASE_Y) < enemy_rocket.radius * 10:
+            if enemy_rocket.status == 'bomb' and i not in alive_building:
+                if i.health > 0 and enemy_rocket.rocket.distance(i.x, i.y) < enemy_rocket.radius * 10:
                     i.health -= 100
                     enemy_rocket.radius += 5
-        #i.base.write(i.health)
+                    i.show_pic()
 
-def check_impact():
-    for i in base_all:
-        i.base.write(i.health)
-        for enemy_rocket in enemy_rockets:
-            if enemy_rocket.status == 'bomb':
-                if enemy_rocket.rocket.distance(BASE_X, BASE_Y) < enemy_rocket.radius * 10:
-                    i.health -= 100
-                    i.base.write(i.health)
-                    enemy_rocket.radius += 5
 
 my_rockets = []
 enemy_rockets = []
 base_all = []
+alive_building = []
 create_building(BUILDING)
 window.onclick(rocket_fire)
 
@@ -170,7 +195,6 @@ while True:
     window.update()
     if game_over():
         continue
-    #check_impact()
     check_enemy_intersection()
     check_enemy_rocket_count()
     rockets_forward(rockets=my_rockets)
