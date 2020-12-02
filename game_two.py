@@ -138,12 +138,21 @@ def rockets_forward(rockets: list):
 
 
 def check_enemy_intersection():
+    base = [i for i in base_all if i.name == 'base']
     for my_rocket in my_rockets:
+        if my_rocket.rocket.distance(my_rocket.from_x, my_rocket.from_y) < 20:
+            window.register_shape(base[0].pic[1])
+            base[0].base.shape(base[0].pic[1])
+            break
+
         if my_rocket.status == 'bomb':
             for enemy_rocket in enemy_rockets:
                 if enemy_rocket.rocket.distance(my_rocket.rocket.xcor(),
                                                 my_rocket.rocket.ycor()) < my_rocket.radius * 10:
                     enemy_rocket.status = 'end'
+    else:
+        window.register_shape(base[0].pic[0])
+        base[0].base.shape(base[0].pic[0])
 
 
 def rocket_fire(x, y):
@@ -154,30 +163,31 @@ def check_enemy_rocket_count():
     if len(enemy_rockets) < 5:
         x = random.randint(-600, 600)
         y = 400
-        index_building = random.randint(0, len(base_all)-1)
-        if base_all[index_building].health > 0:
+        index_building = random.randint(0, len(alive_building)-1)
+        if alive_building[index_building].health > 0:
             enemy_rockets.append(Rocket(color='red', from_x=x, from_y=y,
-                                        where_x=base_all[index_building].x,
-                                        where_y=base_all[index_building].y))
+                                        where_x=alive_building[index_building].x,
+                                        where_y=alive_building[index_building].y))
 
 
 def create_building(buildings: dict):
     for building, value in buildings.items():
-        set_building = Base(building, value)
+        set_building = Base(name=building, building=value)
         base_all.append(set_building)
-        
+        alive_building.append(set_building)
+
 
 def game_over():
-    for i in base_all:
+    for i in alive_building:
         if i.name == 'base' and i.health <= 0:
             i.show_health.color('red')
             i.show_health.setpos(x=0, y=0)
             i.show_health.write('G A M E   O V E R', align="center", font=("Arial", 30, "bold"))
             return True
         elif i.health <= 0:
-            alive_building.append(i)
+            alive_building.remove(i)
         for enemy_rocket in enemy_rockets:
-            if enemy_rocket.status == 'bomb' and i not in alive_building:
+            if enemy_rocket.status == 'bomb' and i in alive_building:
                 if i.health > 0 and enemy_rocket.rocket.distance(i.x, i.y) < enemy_rocket.radius * 10:
                     i.health -= 100
                     enemy_rocket.radius += 5
