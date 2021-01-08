@@ -1,5 +1,6 @@
 import pygame
 import math
+#import numba
 
 from collections import deque
 """ game setting """
@@ -95,10 +96,12 @@ WORD_WIDTH = len(map1[0]) * TILE
 WORD_HEIGHT = len(map1) * TILE
 word_map = dict()
 mini_map = set()
+collision_walls = []
 for j, row in enumerate(map1):
     for i, char in enumerate(row):
         if char != 0:
             mini_map.add((i * MAP_TILE, j * MAP_TILE))
+            collision_walls.append(pygame.Rect(i * TILE, j * TILE, TILE, TILE))
             if char == 1:
                 word_map[(i * TILE, j * TILE)] = 1
             elif char == 2:
@@ -110,18 +113,51 @@ for j, row in enumerate(map1):
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, sprites):
         self.x, self.y = player_pos
+        self.sprites = sprites
         self.angle = player_angle
         self.sensitivity = 0.004
+        """ collision parameters """
+        self.side = 50
+        self.rect = pygame.Rect(*player_pos, self.side, self.side)
+        self.collision_sprrites = [pygame.Rect(*obj.pos, obj.side, obj.side)
+                                   for obj in self.sprites.list_of_object if obj.blocked]
+        self.collision_list =  collision_walls + self.collision_sprrites
 
     @property
     def pos(self):
         return self.x, self.y
 
+    def detect_collision(self, dx, dy):
+        next_pos = self.rect.copy()
+        next_pos.move_ip(dx, dy)
+        hit_indexes = next_pos.collidelistall(self.collision_list)
+        if len(hit_indexes):
+            delta_x, delta_y = 0, 0
+            for hit_index in hit_indexes:
+                hit_rect = self.collision_list[hit_index]
+                if dx > 0:
+                    delta_x += next_pos.right - hit_rect.left
+                else:
+                    delta_x += hit_rect.right - next_pos.left
+                if dy > 0:
+                    delta_y += next_pos.bottom - hit_rect.top
+                else:
+                    delta_y += hit_rect.bottom - next_pos.top
+            if abs(delta_x - delta_y) < 10:
+                dx, dy = 0, 0
+            elif delta_x > delta_y:
+                dy = 0
+            elif delta_y > delta_x:
+                dx = 0
+        self.x += dx
+        self.y += dy
+
     def movement(self):
         self.keys_control()
         self.mouse_control()
+        self.rect.center = self.x, self.y
         self.angle %= DOUBLE_PI
 
     def keys_control(self):
@@ -132,20 +168,24 @@ class Player:
             exit()
 
         if keys[pygame.K_w]:
-            self.x += player_speed * cos_a
-            self.y += player_speed * sin_a
+            dx = player_speed * cos_a
+            dy = player_speed * sin_a
+            self.detect_collision(dx, dy)
             #self.y -= player_speed
         if keys[pygame.K_s]:
-            self.x += -player_speed * cos_a
-            self.y += -player_speed * sin_a
+            dx = -player_speed * cos_a
+            dy = -player_speed * sin_a
+            self.detect_collision(dx, dy)
             #self.y += player_speed
         if keys[pygame.K_a]:
-            self.x += player_speed * sin_a
-            self.y += -player_speed * cos_a
+            dx = player_speed * sin_a
+            dy = -player_speed * cos_a
+            self.detect_collision(dx, dy)
             #self.x -= player_speed
         if keys[pygame.K_d]:
-            self.x += -player_speed * sin_a
-            self.y += player_speed * cos_a
+            dx = -player_speed * sin_a
+            dy = player_speed * cos_a
+            self.detect_collision(dx, dy)
             #self.x += player_speed
         if keys[pygame.K_LEFT]:
             self.angle -= 0.02
@@ -184,7 +224,6 @@ class Drawing:
                 _, object, object_pos = obj
                 self.screen.blit(object, object_pos)
 
-
     def fps(self, clock):
         display_fps = str(int(clock.get_fps()))
         render = self.font.render(display_fps, True, DARKRANGE)
@@ -214,6 +253,7 @@ class Sprite:
                     [pygame.image.load(f'images/sprites/barrel/anim/{img}.png').convert_alpha() for img in range(12)]),
                 'animation_dist': 800,
                 'animation_speed': 10,
+                'blocked': True,
             },
             'pin': {
                 'sprite': pygame.image.load('images/sprites/pin/base/0.png').convert_alpha(),
@@ -246,7 +286,7 @@ class Sprite:
                     [pygame.image.load(f'images/sprites/flame/anim/{img}.png').convert_alpha() for img in range(16)]),
                 'animation_dist': 800,
                 'animation_speed': 5,
-                'blocked': True,
+                'blocked': False,
             },
         }
         self.list_of_object = [
@@ -267,8 +307,11 @@ class SpriteObject:
         self.animation = parameters['animation']
         self.animation_dist = parameters['animation_dist']
         self.animation_speed = parameters['animation_speed']
+        self.blocked = parameters['blocked']
+        self.side = 30
         self.animation_count = 0
-        self.pos = self.x, self.y = pos[0] * TILE, pos[1] * TILE
+        self.x, self.y = pos[0] * TILE, pos[1] * TILE
+        self.pos = self.x - self.side // 2, self.y -self.side // 2
 
         if self.angles:
             self.sprite_angle = [frozenset(range(i, i + 45)) for i in range(0, 360, 45)]
@@ -373,9 +416,10 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.mouse.set_visible(False)
 map_screen = pygame.Surface(MAP_RES)
 clock = pygame.time.Clock()
-player = Player()
-drawing = Drawing(screen, map_screen)
 sprites = Sprite()
+player = Player(sprites)
+drawing = Drawing(screen, map_screen)
+
 
 while True:
     for event in pygame.event.get():
